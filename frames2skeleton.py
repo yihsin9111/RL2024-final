@@ -7,6 +7,7 @@ from PIL import Image
 from ultralytics import YOLO
 import argparse
 import os
+import json
 
 def get_bounding_box(points):
     x_coords = [p[0] for p in points]
@@ -25,7 +26,7 @@ def calculate_distribution(array, scale=0.01):
     distribution = histogram
     return distribution, bin_edges
 
-def detect_cup_with_yolo(image_path, depth_image, x_scale, y_scale):
+def detect_cup_with_yolo(image_path, depth_image):
     model = YOLO('yolov8s.pt') 
     results = model(image_path) 
 
@@ -65,19 +66,18 @@ def detect_cup_with_yolo(image_path, depth_image, x_scale, y_scale):
     # print("Cup depth range:", obj_depth_min, obj_depth_max)
 
     box_coordinates_3d = {
-        "x_min": x_min * x_scale,
-        "y_min": y_min * y_scale,
+        "x_min": x_min,
+        "y_min": y_min,
         "z_min": obj_depth_min,
-        "x_max": x_max * x_scale,
-        "y_max": y_max * y_scale,
+        "x_max": x_max,
+        "y_max": y_max,
         "z_max": obj_depth_max,
     }
 
     return box_coordinates_3d, (x_min, y_min, x_max, y_max), (obj_depth_min, obj_depth_max)
 
-pipe = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf")
-IMAGE_FOLDER="./obj_detect/images"
-def get_3d(image_path):
+
+def get_3d(image_path, output_json_path=None):
     image = Image.open(image_path)
     base_path = './obj_detect/output_images'
     output_original_image_path = f'{base_path}/original_image.jpg'
@@ -87,6 +87,7 @@ def get_3d(image_path):
     plt.savefig(output_original_image_path, bbox_inches='tight', pad_inches=0)
     plt.close()
 
+    pipe = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf")
     depth = pipe(image)["depth"]
 
     # save the depth image
@@ -99,19 +100,19 @@ def get_3d(image_path):
     plt.close()
 
 
-    model = YOLO('yolov8s.pt')
+    # model = YOLO('yolov8s.pt')
 
     # Load image
     image = cv2.imread(image_path)
-    output_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    # output_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    output_path = f'{base_path}/image_only_table.jpg'
+    # output_path = f'{base_path}/image_only_table.jpg'
     # plt figure size same as the original image
-    plt.figure(figsize=(10, 10))
-    plt.imshow(output_image)
-    plt.axis('off') 
-    plt.savefig(output_path, bbox_inches='tight', pad_inches=0)
-    plt.close()
+    # plt.figure(figsize=(10, 10))
+    # plt.imshow(output_image)
+    # plt.axis('off') 
+    # plt.savefig(output_path, bbox_inches='tight', pad_inches=0)
+    # plt.close()
 
     rgb_image_path = f'{base_path}/image_only_table.jpg'
     depth_image_path = f'{base_path}/depth_image.jpg'
@@ -202,7 +203,7 @@ def get_3d(image_path):
     depth_image = cv2.imread(depth_image_path, cv2.IMREAD_GRAYSCALE)
 
     box_coordinates_3d, cup_box_2d, depth_range = detect_cup_with_yolo(
-        f'{base_path}/original_image.jpg', depth_image, x_scale, y_scale
+        f'{base_path}/original_image.jpg', depth_image
     )
 
     if cup_box_2d is None:
@@ -234,6 +235,9 @@ def get_3d(image_path):
         cup_data = {
             "object_center": object_center,
             "corners": corners,
+            "x": abs(x_max - x_min) * x_scale,
+            "y": abs(y_max - y_min) * y_scale,
+            "z": abs(z_max - z_min),
         }
 
     # Step 4: Compute 3D displacements (including depth calculation for hands and the cup)
@@ -277,8 +281,8 @@ def get_3d(image_path):
             })
 
     # Update the JSON data
-    output_json_path = './obj_detect/3d_displacement_result.json'
-    import json
+    # output_json_path = './obj_detect/3d_displacement_result.json'
+    
     # Ensure all elements are JSON serializable
     data = {
         "image_path": image_path,
@@ -313,6 +317,21 @@ def get_3d(image_path):
     with open(output_json_path, 'w') as f:
         json.dump(all_data, f, indent=4)
 
-for image in os.listdir(IMAGE_FOLDER):
-    get_3d(f"{IMAGE_FOLDER}/{image}")
-    print(f"Done with {image}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Process images to extract 3D skeletons and save results as JSON.")
+    parser.add_argument("--input", required=True, help="Directory containing input images.")
+    parser.add_argument("--output", required=True, help="Directory to save output JSON files.")
+    args = parser.parse_args()
+
+    input_dir = args.input
+    output_dir = args.output
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    for image_name in sorted(os.listdir(input_dir)):
+        image_path = os.path.join(input_dir, image_name)
+        output_json_path = os.path.join(output_dir, os.path.splitext(image_name)[0] + '.json')
+        get_3d(image_path, output_json_path)
+        print(f"Processed {image_name} and saved to {output_json_path}")
