@@ -47,7 +47,7 @@ The below steps will help build the 3D skeleton of human and object in order to 
       ```
 ### Train & Inference
 ```bash
-python3 imitate_episodes.py \
+python3 act/imitate_episodes.py \
 --task_name <task_name> \
 --ckpt_dir <ckpt dir> \
 --policy_class ACT --kl_weight 10 --chunk_size 100 --hidden_dim 512 --batch_size 32 --dim_feedforward 3200 \
@@ -57,7 +57,7 @@ python3 imitate_episodes.py \
 
 ### Validation
 ```bash
-python3 imitate_episodes.py \
+python3 act/imitate_episodes.py \
 --task_name <task_name> \
 --ckpt_dir <ckpt dir> \
 --policy_class ACT --kl_weight 10 --chunk_size 100 --hidden_dim 512 --batch_size 32 --dim_feedforward 3200 \
